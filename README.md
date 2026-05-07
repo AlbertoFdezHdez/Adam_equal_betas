@@ -1,10 +1,10 @@
 # Adam beta-grid experiments
 
-This repository contains training code, analysis scripts, and lightweight paper artifacts for a set of Adam optimizer experiments over a beta-grid.
+This is a compact GitHub-ready release of the Adam beta-grid project. It contains the code needed to run the experiments, the plotting scripts used for the paper figures, and a small set of lightweight paper artifacts.
 
-The central experimental question is how the choice of `(beta1, beta2)` affects training dynamics, especially the oscillation of the normalized Adam update direction `||R_k||`. The public layout is designed so that readers can either inspect the paper artifacts directly or reproduce the figures from downloaded run outputs.
+The main question studied here is how Adam's `(beta1, beta2)` choices affect training dynamics, especially the oscillation of the normalized Adam update direction `||R_k||`.
 
-## Repository layout
+## What is included
 
 ```text
 code/
@@ -13,60 +13,141 @@ code/
   utils/                Shared models, datasets, runtime, metrics, and result writers.
 
 display/
-  display_code/         Figure/table generation code.
-  plots/                Generated local plots.
-
-paper_artifacts/
-  figures/              Curated PDF figures for the paper.
-  tables/               Lightweight CSV/TXT/TeX tables used in the paper.
-  theory_diagnostics/   Lightweight diagnostic summaries from the theory validation runs.
+  display_code/         Figure/table generation scripts and notebooks.
 
 validacion_teoria/
   code/                 Gradient-probe and Adam decomposition diagnostics.
-  results/              Local diagnostic outputs. Heavy arrays are not meant for GitHub.
 
-legacy/
-  for_training/         Original training snapshot, preserved for provenance.
-  for_visualizing/      Original visualization snapshot, preserved for provenance.
+paper_artifacts/
+  figures/              Selected PDF figures for the paper.
+  tables/grid5/         5x5 beta-grid summary tables.
+  tables/legacy_grid3/  Lightweight summaries derived from legacy 3x3 outputs.
+  theory_diagnostics/   A small subset of compact diagnostic summaries.
+
+docs/
+  repository_structure.md
+  reproduce_figures.md
+  run_training.md
+  github_release_plan.md
+
+tools/
+  collect_public_artifacts.py
 ```
 
-## Quick start: reproduce paper tables and figures from existing outputs
+This compact upload has roughly 100 files and is meant to be easy to inspect on GitHub.
 
-Install plotting dependencies:
+## What is intentionally not included
+
+Large or private files are excluded from this upload:
+
+- Raw training trajectories under `descargas/results/`.
+- Cluster logs under `descargas/logs/`.
+- Checkpoints and model states.
+- Large NumPy arrays from gradient-probe runs.
+- Legacy PKL trajectory blobs.
+- Private credentials such as `kaggle.json` and `hf_token.txt`.
+
+If exact full reproduction is required, publish those heavy files separately as a GitHub Release asset, Zenodo archive, or institutional storage bundle.
+
+Expected external raw-output layout:
+
+```text
+descargas/results/<experiment>/runs/*.json
+legacy/for_visualizing/results/*.pkl
+validacion_teoria/descargas/
+```
+
+## Quick start: inspect paper artifacts
+
+The most useful files to inspect first are:
+
+```text
+paper_artifacts/figures/resnet18_cifar100_grid5.pdf
+paper_artifacts/figures/nanogpt_wikitext_grid5.pdf
+paper_artifacts/tables/grid5/omega1_grid5_report.txt
+paper_artifacts/tables/grid5/hypothesis_tests.csv
+```
+
+The 5x5 tables report oscillation statistics for:
+
+- `resnet18_cifar100`
+- `nanogpt_wikitext`
+
+over beta values:
+
+```text
+{0.900, 0.968, 0.990, 0.9968, 0.999}
+```
+
+and seeds:
+
+```text
+0, 1, 2
+```
+
+## Reproducing the 5x5 figures from raw run JSON files
+
+Install display dependencies:
 
 ```bash
 pip install -r requirements-display.txt
 ```
 
-Regenerate the 5x5 beta-grid analysis for the downloaded ResNet/CIFAR-100 and NanoGPT/WikiText runs:
+Place raw run JSON files under:
+
+```text
+descargas/results/
+```
+
+with paths such as:
+
+```text
+descargas/results/resnet18_cifar100/runs/*.json
+descargas/results/nanogpt_wikitext/runs/*.json
+```
+
+Then run:
 
 ```bash
 cd display/display_code
 python analyze_grid5_results.py
 ```
 
-Outputs are written to:
+Generated outputs go to:
 
 ```text
 display/plots/
 display/display_code/grid5_outputs/
 ```
 
-To collect the lightweight public artifacts into `paper_artifacts/`:
+To refresh the compact public artifacts:
 
 ```bash
 python tools/collect_public_artifacts.py
 ```
 
-## Training experiments
+## Running a training experiment
 
-The main training campaign uses:
+Install training dependencies:
+
+```bash
+pip install -r code/requirements-train.txt
+```
+
+Example:
+
+```bash
+cd code
+python -m experiments.resnet18_cifar100 --beta1 0.9 --beta2 0.99 --seed 1
+```
+
+The full campaign consists of:
 
 - `6` model/dataset experiments.
 - `25` beta pairs in `{0.900, 0.968, 0.990, 0.9968, 0.999}^2`.
 - `3` seeds: `0, 1, 2`.
 
-The six experiment entrypoints are:
+Experiment entrypoints:
 
 - `resnet18_cifar100`
 - `efficientnet_tinyimagenet`
@@ -75,37 +156,17 @@ The six experiment entrypoints are:
 - `nanogpt_wikitext`
 - `nanogpt_slimpajama`
 
-Example single run:
+See `docs/run_training.md` and `code/experiments/README.md` for launcher details.
 
-```bash
-cd code
-python -m experiments.resnet18_cifar100 --beta1 0.9 --beta2 0.99 --seed 1
-```
+## Notes on cluster-specific launchers
 
-See `code/README.md` and `code/experiments/README.md` for the SLURM launchers.
+The SLURM launchers were written for the original cluster environment. Before reuse, check:
 
-## Data and artifact policy
-
-GitHub is not a good place for multi-GB raw training traces, checkpoints, or gradient arrays. This repository therefore keeps:
-
-- Source code.
-- Lightweight CSV/TXT/TeX summaries.
-- Curated PDF figures.
-- Scripts that regenerate figures when raw run outputs are available.
-
-The following are intentionally excluded by `.gitignore`:
-
-- Private tokens such as `kaggle.json` and `hf_token.txt`.
-- Local logs.
-- Checkpoints.
-- Large NumPy arrays.
-- Legacy PKL trajectory blobs.
-
-For a fully reproducible public release, upload raw run outputs as a separate release asset or Zenodo archive, then document the download location in `paper_artifacts/README.md`.
-
-## Legacy provenance
-
-The `legacy/` folder is preserved to keep the original handoff intact. Public-facing summaries derived from it are copied into `paper_artifacts/` so users do not need to inspect the legacy tree for normal figure/table reproduction.
+- partition and node names,
+- Python environment path,
+- dataset paths,
+- scratch/output paths,
+- NanoGPT repository location.
 
 ## License
 
