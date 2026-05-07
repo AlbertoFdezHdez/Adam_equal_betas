@@ -1,0 +1,37 @@
+{
+  "matrix_path": "C:\\Users\\aferher1\\Desktop\\Deep Learning\\2025 - 2029 DOCTORADO\\Programas python\\4. Para Adam y beta1=beta2\\validacion_teoria\\results\\log_gradient_changes\\probe_bs128\\triple_r\\triple_r.npy",
+  "max": 23.654584884643555,
+  "mean": -0.19053955158442906,
+  "min": -13.446243286132812,
+  "mode": "triple_r",
+  "n_parameters": 24458,
+  "n_steps": 7040,
+  "n_time_positions": 7038,
+  "sample_path": "C:\\Users\\aferher1\\Desktop\\Deep Learning\\2025 - 2029 DOCTORADO\\Programas python\\4. Para Adam y beta1=beta2\\validacion_teoria\\results\\log_gradient_changes\\probe_bs128\\triple_r\\triple_r_sample.npy",
+  "sample_percentiles": {
+    "p0.5": -2.890857717990875,
+    "p1": -2.2462326860427857,
+    "p25": -0.22912812232971191,
+    "p5": -0.9432249307632447,
+    "p50": -0.08034765720367432,
+    "p75": 0.017323017120361328,
+    "p95": 0.27905232906341526,
+    "p99": 0.9496190476417543,
+    "p99.5": 1.4936819005012407
+  },
+  "sample_size": 2000000,
+  "std": 0.589316723993993,
+  "temporal_percentile_means": {
+    "p25": -0.28349000215530396,
+    "p5": -1.052276849746704,
+    "p50": -0.10677971690893173,
+    "p75": 0.008392367511987686,
+    "p95": 0.29389598965644836
+  },
+  "temporal_valid_fraction_max": 0.9824597239494324,
+  "temporal_valid_fraction_mean": 0.8578881025314331,
+  "temporal_valid_fraction_min": 0.3970479965209961,
+  "total_cases": 172135404,
+  "valid_cases": 147672923,
+  "valid_percent": 85.78881483323443
+}

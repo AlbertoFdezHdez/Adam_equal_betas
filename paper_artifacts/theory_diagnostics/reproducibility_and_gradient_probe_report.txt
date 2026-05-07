@@ -1,0 +1,434 @@
+REPRODUCIBILITY AND GRADIENT-PROBE REPORT
+=========================================
+
+This report describes the exact local experiment used for the gradient-probe
+analysis reported below. The reported run is:
+
+  validacion_teoria/descargas/adam_gradient_cifar10/runs/
+  cifar10_tinycnn_adam_b1-0p9_b2-0p999_bs-128_grad-probe_seed-1234
+
+The gradients analyzed here are probe gradients, not training minibatch
+gradients. Adam updates the model with the train minibatch gradient; the saved
+gradient at each iteration is the gradient of a fixed validation batch.
+
+
+1. Environment
+--------------
+
+Operating system/session:
+  Windows, PowerShell.
+
+Python and library versions used in this local run:
+  Python:      3.13.7 [MSC v.1944 64 bit (AMD64)]
+  PyTorch:     2.10.0.dev20250911+cpu
+  torchvision: 0.24.0.dev20250911+cpu
+  NumPy:       2.3.3
+  matplotlib:  3.10.6
+
+Device:
+  CPU only.
+
+Threading:
+  torch.get_num_threads() returned 10 in this environment.
+
+
+2. Dataset and split
+--------------------
+
+Dataset:
+  CIFAR-10 from torchvision.datasets.CIFAR10.
+
+Data root:
+  validacion_teoria/descargas/data
+
+Original CIFAR-10 train split:
+  50,000 images, 10 classes.
+
+Deterministic split:
+  A torch.Generator with manual_seed(1234) was used to create a random
+  permutation of the 50,000 CIFAR-10 training examples.
+
+  Validation/probe split:
+    First 5,000 indices of that permutation.
+
+  Training split:
+    Remaining 45,000 indices.
+
+The official CIFAR-10 test set was not used in this experiment. The word
+"validation" refers to the held-out 5,000 examples from the original training
+split.
+
+Train transform:
+  transforms.RandomCrop(32, padding=4)
+  transforms.RandomHorizontalFlip()
+  transforms.ToTensor()
+  transforms.Normalize(mean=(0.4914, 0.4822, 0.4465),
+                       std=(0.2470, 0.2435, 0.2616))
+
+Validation/probe transform:
+  transforms.ToTensor()
+  transforms.Normalize(mean=(0.4914, 0.4822, 0.4465),
+                       std=(0.2470, 0.2435, 0.2616))
+
+Important:
+  The probe batch does not use data augmentation. The train batches do use data
+  augmentation. The probe gradient is also computed with model.eval(), so the
+  probe pass does not update BatchNorm running statistics.
+
+
+3. Model architecture
+---------------------
+
+Model name:
+  TinyCIFARCNN
+
+Number of trainable parameters:
+  24,458
+
+Architecture:
+  Input: CIFAR-10 image tensor with shape (3, 32, 32)
+
+  features:
+    Conv2d(in_channels=3, out_channels=16, kernel_size=3, padding=1, bias=True)
+    BatchNorm2d(16)
+    ReLU(inplace=True)
+    MaxPool2d(kernel_size=2)
+
+    Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding=1, bias=True)
+    BatchNorm2d(32)
+    ReLU(inplace=True)
+    MaxPool2d(kernel_size=2)
+
+    Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1, bias=True)
+    BatchNorm2d(64)
+    ReLU(inplace=True)
+    AdaptiveAvgPool2d(output_size=(1, 1))
+
+  classifier:
+    Flatten over non-batch dimensions
+    Linear(in_features=64, out_features=10, bias=True)
+
+Loss:
+  torch.nn.functional.cross_entropy
+
+
+4. Seeds and determinism
+------------------------
+
+Seed:
+  1234
+
+The script set:
+  os.environ["PYTHONHASHSEED"] = "1234"
+  random.seed(1234)
+  numpy.random.seed(1234)
+  torch.manual_seed(1234)
+  torch.use_deterministic_algorithms(True, warn_only=True)
+
+For strict external reproducibility, launch Python with PYTHONHASHSEED=1234 as
+well. In this experiment, no part of the data split or training logic depends on
+Python hash iteration order.
+
+DataLoader shuffle:
+  The train DataLoader used a torch.Generator with manual_seed(1235), i.e.
+  seed + 1.
+
+DataLoader settings:
+  num_workers = 0
+  pin_memory = False
+  drop_last = False
+
+
+5. Training hyperparameters
+---------------------------
+
+Optimizer:
+  torch.optim.Adam
+
+Adam parameters:
+  beta1 = 0.9
+  beta2 = 0.999
+  learning_rate = 0.001
+  weight_decay = 0.0
+  eps = 1e-8 (PyTorch default)
+  amsgrad = False (PyTorch default)
+
+Scheduler:
+  None. The learning rate is constant throughout training.
+
+Epochs:
+  20
+
+Train batch size:
+  128
+
+Validation/probe batch size:
+  128
+
+Training examples:
+  45,000
+
+Iterations per epoch:
+  ceil(45000 / 128) = 352
+
+Total optimizer iterations:
+  352 * 20 = 7,040
+
+The final train batch in each epoch is smaller because drop_last=False.
+
+Final metrics of this run:
+  train_loss     = 0.8915718793
+  train_accuracy = 0.6886888889
+  val_loss       = 0.9238049208
+  val_accuracy   = 0.6820000000
+
+Command used:
+  python .\train_adam_gradient_grid.py --mode single --beta1 0.9 --beta2 0.999 --epochs 20 --batch-size 128 --lr 0.001 --weight-decay 0.0 --grad-dtype float16 --saved-gradient-source probe
+
+
+6. Probe-gradient saving protocol
+---------------------------------
+
+At each training iteration k:
+
+  1. A train minibatch is sampled from the train DataLoader. The model is in
+     train mode, so train augmentation is active and BatchNorm running
+     statistics are updated in the usual training way.
+
+  2. The train minibatch forward pass is computed.
+
+  3. The train loss is computed using cross entropy.
+
+  4. Backward is called. At this point, model.parameters() contain the train
+     gradients that Adam will use.
+
+  5. These train gradients are cloned temporarily.
+
+  6. optimizer.zero_grad(set_to_none=True) is called.
+
+  7. The fixed probe batch is evaluated. The fixed probe batch is the first
+     batch of the deterministic validation DataLoader. It has 128 images, no
+     data augmentation, and is always the same batch throughout the run.
+
+  8. The probe forward/backward pass is performed with model.eval(). Therefore,
+     the probe pass does not modify BatchNorm running statistics.
+
+  9. The probe gradient is flattened by iterating over model.parameters() in
+     PyTorch order. The parameter-to-coordinate map is stored in:
+
+       param_metadata.json
+
+ 10. The flattened probe gradient is computed in float32, cast to float16, and
+     written as row k of:
+
+       gradients.npy
+
+ 11. The cloned train gradients are restored.
+
+ 12. optimizer.step() is called. Thus Adam updates the model using the train
+     minibatch gradient, not the probe gradient.
+
+The saved gradient matrix has:
+  shape = (7040, 24458)
+  dtype = float16
+  rows  = training iterations
+  cols  = flattened trainable parameters
+
+Total number of saved gradient entries:
+  7040 * 24458 = 172,184,320
+
+Important precision note:
+  All analyses below are performed on the saved float16 gradient matrix. Thus
+  "exactly zero" means exactly zero after storage in float16. The gradient was
+  originally formed in float32 before being cast to float16.
+
+
+7. Exactly zero gradients
+-------------------------
+
+Question:
+  In the saved probe-gradient matrix, how many entries are exactly zero?
+
+Method:
+  Load gradients.npy using numpy.load(..., mmap_mode="r") and count exact
+  equality to zero by row blocks:
+
+    count += np.count_nonzero(block == 0)
+
+Result:
+  shape = (7040, 24458)
+  dtype = float16
+  total entries = 172,184,320
+  exact zeros = 328
+
+Relative frequency:
+  zero_fraction = 328 / 172,184,320
+                = 0.000001904935
+
+  zero_percent  = 0.000190494 %
+
+Equivalently:
+  zero_fraction is approximately 1.9 * 10^(-6), i.e. about 2 / 10^6.
+
+Conclusion:
+  Exact zeros are negligible for the sign and log-magnitude analyses.
+
+
+8. Constant-sign windows and magnitude-ratio condition
+------------------------------------------------------
+
+For a window width w and a start index k, consider the sequence:
+
+  g_{k,i}, g_{k+1,i}, ..., g_{k+w-1,i}
+
+for each coordinate i of the flattened probe gradient.
+
+Condition A: constant sign
+  A case (k, i) is counted as constant-sign if all w values are nonzero and
+  have the same sign. If any value is zero or if the sign changes, the case
+  fails Condition A.
+
+Condition B: bounded magnitude ratio
+  Among the cases satisfying Condition A, define:
+
+    ratio_{k,i,w} = max_t |g_{k+t,i}| / min_t |g_{k+t,i}|,  t = 0,...,w-1
+
+  Condition B is:
+
+    ratio_{k,i,w} < sqrt(2)
+
+The table reports:
+  Row 1: percentage of all cases satisfying Condition A.
+  Row 2: percentage satisfying Condition B among those already satisfying A.
+  Row 3: percentage of all cases satisfying both A and B.
+
+The window is moved across all admissible time positions k. For a given w,
+there are (7040 - w + 1) time windows, and each is evaluated over all 24,458
+gradient coordinates.
+
+Table, reported for w = 2,...,6:
+
+  metric                                                        w=2        w=3        w=4        w=5        w=6
+  ----------------------------------------------------------------------------------------------------------------
+  % constant sign                                               92.7321    85.7888    79.1238    72.7588    66.7297
+  % ratio < sqrt(2) | constant sign                             67.6502    47.4627    34.4815    25.0421    18.0835
+  % total satisfying both                                       62.7335    40.7177    27.2831    18.2203    12.0671
+
+CSV/JSON outputs:
+  validacion_teoria/results/tables/gradient_ratio_threshold/probe_bs128/
+
+
+9. Consecutive log-gradient change Delta
+----------------------------------------
+
+For consecutive same-sign nonzero pairs, define:
+
+  Delta_{k,i} = log |g_{k+1,i}| - log |g_{k,i}|
+
+This is computed only when g_{k,i} and g_{k+1,i} are both nonzero and have the
+same sign. Otherwise the pair is excluded.
+
+Total possible consecutive cases:
+  (7040 - 1) * 24458 = 172,159,862
+
+Valid same-sign nonzero cases:
+  159,647,370
+
+Valid percentage:
+  92.7320504009 %
+
+Exact streaming statistics over all valid Delta values:
+  mean = 0.0006649673
+  std  = 0.6775685383
+  min  = -13.5733070374
+  max  = 13.9229555130
+
+Signs of Delta:
+  Delta > 0: 79,928,989 cases = 50.0659603725 %
+  Delta < 0: 79,541,693 cases = 49.8233657091 %
+  Delta = 0:    176,688 cases =  0.1106739184 %
+
+Small-change thresholds:
+  log(sqrt(2)) = 0.3465735903
+  log(2)       = 0.6931471806
+  log(1.1)     = 0.0953101798
+
+Exact counts:
+  |Delta| < log(sqrt(2)):
+    108,001,835 cases = 67.6502437842 % of valid same-sign pairs
+
+  |Delta| < log(2):
+    135,906,472 cases = 85.1291643577 % of valid same-sign pairs
+
+  |Delta| < log(1.1):
+     44,400,103 cases = 27.8113588717 % of valid same-sign pairs
+
+Interpretation:
+  Delta is strongly centered near zero. Its exact mean is 0.000665, and the
+  positive/negative split is almost exactly balanced. More than two thirds of
+  same-sign consecutive pairs change magnitude by less than a factor sqrt(2),
+  and more than 85% change by less than a factor 2.
+
+Histogram:
+  A publication-style histogram was generated from a deterministic reservoir
+  sample of 2,000,000 valid Delta values, with seed 1234. The plot is clipped
+  to the sample 0.5 and 99.5 percentiles for visualization only; the statistics
+  above are exact over all valid Delta values.
+
+  Histogram path:
+    validacion_teoria/results/plots/delta_log_gradient_histogram_probe_bs128.pdf
+    validacion_teoria/results/plots/delta_log_gradient_histogram_probe_bs128.png
+
+Histogram style:
+  Matplotlib default style, Computer Modern serif font, LaTeX text when
+  available, blue histogram (#1f4e79), dark red threshold lines (#8b0000), and
+  a black zero line (#222222), matching the palette used in the project plots.
+
+Sample percentiles used for the histogram:
+  p0.5 = -2.8165521288
+  p1   = -2.1753379869
+  p5   = -0.9241520166
+  p25  = -0.2017174363
+  p50  =  0.0008430481
+  p75  =  0.2024751902
+  p95  =  0.9250836611
+  p99  =  2.1695061660
+  p99.5=  2.7939710093
+
+
+10. Files generated for this report
+-----------------------------------
+
+Training code:
+  validacion_teoria/code/train_adam_gradient_grid.py
+
+Sign/magnitude table code:
+  validacion_teoria/code/analyze_gradient_ratio_threshold_table.py
+
+Delta analysis code:
+  validacion_teoria/code/analyze_gradient_log_changes.py
+
+Delta histogram plotting code:
+  validacion_teoria/code/plot_delta_histogram_publication.py
+
+Main gradient matrix:
+  validacion_teoria/descargas/adam_gradient_cifar10/runs/
+  cifar10_tinycnn_adam_b1-0p9_b2-0p999_bs-128_grad-probe_seed-1234/
+  gradients.npy
+
+Parameter metadata:
+  validacion_teoria/descargas/adam_gradient_cifar10/runs/
+  cifar10_tinycnn_adam_b1-0p9_b2-0p999_bs-128_grad-probe_seed-1234/
+  param_metadata.json
+
+Window table:
+  validacion_teoria/results/tables/gradient_ratio_threshold/probe_bs128/
+  ratio_threshold_table_wide.csv
+
+Delta outputs:
+  validacion_teoria/results/log_gradient_changes/probe_bs128/pair_s/
+
+Publication histogram:
+  validacion_teoria/results/plots/delta_log_gradient_histogram_probe_bs128.pdf
+  validacion_teoria/results/plots/delta_log_gradient_histogram_probe_bs128.png
+
