@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="${REPO_ROOT:?Missing REPO_ROOT}"
+CODE_ROOT="${CODE_ROOT:-$REPO_ROOT/code}"
+PYTHON_BIN="${PYTHON_BIN:-python}"
+EXPERIMENT_MODULE="${EXPERIMENT_MODULE:?Missing EXPERIMENT_MODULE}"
+BETA1S_CSV="${BETA1S_CSV:?Missing BETA1S_CSV}"
+BETA2S_CSV="${BETA2S_CSV:-$BETA1S_CSV}"
+SEEDS_CSV="${SEEDS_CSV:?Missing SEEDS_CSV}"
+LOG_ROOT="${LOG_ROOT:-$REPO_ROOT/descargas/logs}"
+DATA_ROOT="${DATA_ROOT:-/scratch1/hernanal/datasets}"
+
+IFS=',' read -r -a BETA1S <<< "$BETA1S_CSV"
+IFS=',' read -r -a BETA2S <<< "$BETA2S_CSV"
+IFS=',' read -r -a SEEDS <<< "$SEEDS_CSV"
+
+NUM_BETA1=${#BETA1S[@]}
+NUM_BETA2=${#BETA2S[@]}
+NUM_SEEDS=${#SEEDS[@]}
+TASK_ID="${SLURM_ARRAY_TASK_ID:?Missing SLURM_ARRAY_TASK_ID}"
+
+SEED_INDEX=$(( TASK_ID / (NUM_BETA1 * NUM_BETA2) ))
+REM=$(( TASK_ID % (NUM_BETA1 * NUM_BETA2) ))
+BETA1_INDEX=$(( REM / NUM_BETA2 ))
+BETA2_INDEX=$(( REM % NUM_BETA2 ))
+
+if (( SEED_INDEX >= NUM_SEEDS )); then
+  echo "SLURM_ARRAY_TASK_ID=$TASK_ID is out of range"
+  exit 1
+fi
+
+BETA1="${BETA1S[$BETA1_INDEX]}"
+BETA2="${BETA2S[$BETA2_INDEX]}"
+SEED="${SEEDS[$SEED_INDEX]}"
+
+mkdir -p "$LOG_ROOT/$EXPERIMENT_MODULE"
+LOG_FILE="$LOG_ROOT/$EXPERIMENT_MODULE/${EXPERIMENT_MODULE}_b1-${BETA1}_b2-${BETA2}_seed-${SEED}.log"
+
+export TRAINING_DATA_DIR="${TRAINING_DATA_DIR:-$DATA_ROOT}"
+export HF_HOME="${HF_HOME:-$TRAINING_DATA_DIR/hf_cache}"
+export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-$HF_HOME/datasets}"
+export HF_HUB_CACHE="${HF_HUB_CACHE:-$HF_HOME/hub}"
+export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/transformers}"
+export TORCH_HOME="${TORCH_HOME:-$TRAINING_DATA_DIR/torch_cache}"
+
+if [[ -n "${KAGGLE_JSON_PATH:-}" ]]; then
+  KAGGLE_DIR="${SLURM_TMPDIR:-/tmp}/kaggle_${SLURM_JOB_ID:-manual}"
+  mkdir -p "$KAGGLE_DIR"
+  cp "$KAGGLE_JSON_PATH" "$KAGGLE_DIR/kaggle.json"
+  chmod 600 "$KAGGLE_DIR/kaggle.json"
+  export KAGGLE_CONFIG_DIR="$KAGGLE_DIR"
+fi
+
+cd "$CODE_ROOT"
+"$PYTHON_BIN" -m "experiments.${EXPERIMENT_MODULE}" --beta1 "$BETA1" --beta2 "$BETA2" --seed "$SEED" 2>&1 | tee "$LOG_FILE"

@@ -1,0 +1,16 @@
+torch
+torchvision
+datasets
+transformers
+huggingface_hub[cli]
+tiktoken
+kaggle
+pyarrow
+zstandard
+fsspec
+aiohttp
+tqdm
+numpy
+wandb
+
+# NanoGPT is expected as a cloned repo, not as a pip package.
