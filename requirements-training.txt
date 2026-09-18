@@ -1,0 +1,13 @@
+-r requirements.txt
+torchvision
+datasets
+transformers
+huggingface-hub
+sentencepiece
+tiktoken
+kaggle
+pyarrow
+zstandard
+fsspec
+aiohttp
+tqdm
